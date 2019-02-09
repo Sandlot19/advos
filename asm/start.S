@@ -47,16 +47,59 @@ _start:
 	li	a0, 0
 	li	a1, 0
 
-	//Go into machine mode
-	//Put mepc into main and return to jump to it
-	li	t5, 0x1800
+	//Go into machine mode, and enable MPIE and MIE
+  // MPIE => Machine Previous Interrupt Enable
+  //      => bit 7
+  // MIE  => Machine Interrupt Enable
+  //      => bit 3
+	li	t5, 0x1888
 	csrrs	zero, mstatus, t5
+	//Put mepc into main and return to jump to it
 	//Main is written in Rust (lib.rs)
 	la	t1, main
 	csrrw	zero, mepc, t1
+
+  // Enable HW|CLINT|SW interrupts
+  // (bits) 11     7  3 in mie = 0x888
+  li    t1, 0x888
+  csrrw zero, mie, t1
+
+  // Set RISC-V trap handler function to be the mtvec
+  la    t1, trap_handler
+  
+  // ensure that the trap handler is aligned by 4 since the lower 2 bits of
+  // mtvec _must_ be 0 to for MODE to be set to direct since our trap handler
+  // handles all interrupts/traps
+  li    t0, 0xC
+  and   t1, t1, t0 
+  csrrw zero, mtvec, t1
+
 	mret
 
 park:
 	//All HARTs that are != 0 will go here and spin in a wait loop
 	wfi
 	j	park
+
+// RISC-V trap handler function has to be aligned by 4. This function will jump
+// to the rust trap_handler where the trap will _actually_ be handled. This
+// label simply saves registers and restores them upon the trap being
+// successfully handled.
+.global trap_handler
+.align 4
+trap_handler:
+  // save mepc - the instruction that was interrupted by the trap
+  // and mstatus. The csrrs pseudo-instruction will not execute the
+  // set operation if the src register is x0 (zero).
+  csrrs s1, mepc, zero
+  csrrs s2, mstatus, zero
+
+  // set up arguments for rust function
+  // arg0 = mcause
+  csrrs a0, mcause, zero
+
+  // TODO: add code to set the mepc register to the correct rust function
+
+  // restore the mepc so we jump to the code that was running before the trap
+  csrrw zero, mepc, s1
+  mret
