@@ -6,6 +6,7 @@
 #![allow(dead_code,unused_variables)]
 
 mod console;
+mod trap;
 
 use console::Console;
 use core::fmt::Write;
@@ -64,6 +65,17 @@ fn main() {
     println!("  Formatted Double: 1.23456 of width 3 is {:.3}", 1.23456);
     println!("  Formatted Int: 42 of width 4 with leading zeroes is {:04}", 42);
     println!();
+
+    println!("sending hardware interrupt");
+    unsafe { asm!("csrrw zero, mip, $0" ::"r"(0x800)::"volatile"); asm!("mret" ::::"volatile"); }
+    println!("getting mie register");
+    let mie: u32;
+    unsafe { asm!("csrr $0, mie" : "=r"(mie) :::"volatile"); }
+    println!("mie = 0x{:x}", mie);
+    println!("getting mip register");
+    let mip: u32;
+    unsafe { asm!("csrr $0, mip" : "=r"(mip) :::"volatile"); }
+    println!("mip = 0x{:x}", mip);
 
     loop {
         if let Some(s) = console::Console::read() {
