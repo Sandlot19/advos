@@ -10,6 +10,7 @@ mod trap;
 
 use console::Console;
 use core::fmt::Write;
+use core::ptr::{write_volatile};
 
 #[macro_export]
 macro_rules! print {
@@ -49,6 +50,8 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     abort()
 }
 
+const CORE_LOCAL_INTERRUPT_MAP: u64 = 0x0200_0000;
+
 #[no_mangle]
 fn main() {
     // Intialize UART for reading/writing
@@ -66,16 +69,11 @@ fn main() {
     println!("  Formatted Int: 42 of width 4 with leading zeroes is {:04}", 42);
     println!();
 
-    println!("sending hardware interrupt");
-    unsafe { asm!("csrrw zero, mip, $0" ::"r"(0x800)::"volatile"); asm!("mret" ::::"volatile"); }
-    println!("getting mie register");
-    let mie: u32;
-    unsafe { asm!("csrr $0, mie" : "=r"(mie) :::"volatile"); }
-    println!("mie = 0x{:x}", mie);
-    println!("getting mip register");
-    let mip: u32;
-    unsafe { asm!("csrr $0, mip" : "=r"(mip) :::"volatile"); }
-    println!("mip = 0x{:x}", mip);
+    let clim = CORE_LOCAL_INTERRUPT_MAP as *mut u32;
+    let interrupt_mask: u32 = 0x008;
+
+    println!("sending software interrupt");
+    unsafe { write_volatile(clim, interrupt_mask); }
 
     loop {
         if let Some(s) = console::Console::read() {

@@ -70,7 +70,7 @@ _start:
   // ensure that the trap handler is aligned by 4 since the lower 2 bits of
   // mtvec _must_ be 0 to for MODE to be set to direct since our trap handler
   // handles all interrupts/traps
-  li    t0, (1 << 3) | (1 << 2)
+  li    t0, ~( (1 << 1) | 1 )
   and   t1, t1, t0 
   csrw  mtvec, t1
 
@@ -88,20 +88,21 @@ park:
 .global trap_handler
 .align 4
 trap_handler:
-  // save mepc - the instruction that was interrupted by the trap
-  // and mstatus. The csrrs pseudo-instruction will not execute the
-  // set operation if the src register is x0 (zero).
-  csrr s1, mepc
-  csrr s2, mstatus
-
-  // set up arguments for rust function
+  // save mepc - the instruction that was interrupted by the trap.
+  // The csrrs pseudo-instruction will not execute the set operation if the src
+  // register is x0 (zero).
   // arg0 = mcause
+  // arg1 = mepc
   csrr a0, mcause
+  csrr a1, mepc
+  csrr s0, mstatus
+  add  s1, ra, zero
 
-  // TODO: add code to jump to the rust trap handler
-  j handle_trap
+  call handle_trap
 
-  // restore the mepc so we jump to the code that was running before the trap
-  csrw  mepc, s1
-  csrw  mstatus, s2
+  // restore the old return address to the mepc so we jump back to the correct
+  // location that we left when we trapped
+  csrw mepc, s1
+  csrw mstatus, s0
+
   mret
