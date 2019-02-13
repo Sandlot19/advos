@@ -47,17 +47,29 @@ _start:
 	li	a0, 0
 	li	a1, 0
 
-	//Go into machine mode, and enable MPIE and MIE
+	//Go into machine mode
+	li	t5, 0x1800
+	csrw	mstatus, t5
+
+	//Put main into mepc and return to jump to it
+	//Main is written in Rust (lib.rs)
+	la	t1, main
+	csrw	mepc, t1
+
+	mret
+
+// This is called from Rust, so we know we're in machine mode
+.global enable_interrupts
+enable_interrupts:
+  // Enable interrupts with MPIE and MIE bits in mstatus
   // MPIE => Machine Previous Interrupt Enable
   //      => bit 7
   // MIE  => Machine Interrupt Enable
   //      => bit 3
-	li	t5, 0x1888
-	csrw	mstatus, t5
-	//Put mepc into main and return to jump to it
-	//Main is written in Rust (lib.rs)
-	la	t1, main
-	csrw	mepc, t1
+  csrr  t0, mstatus
+  li    t1, 0x88
+  or    t0, t0, t1
+  csrw  mstatus, t0
 
   // Enable HW|CLINT|SW interrupts
   // (bits) 11     7  3 in mie = 0x888
@@ -68,13 +80,13 @@ _start:
   la    t1, trap_handler
   
   // ensure that the trap handler is aligned by 4 since the lower 2 bits of
-  // mtvec _must_ be 0 to for MODE to be set to direct since our trap handler
+  // mtvec _must_ be 0 for MODE to be set to direct since our trap handler
   // handles all interrupts/traps
   li    t0, ~( (1 << 1) | 1 )
   and   t1, t1, t0 
   csrw  mtvec, t1
 
-	mret
+  ret
 
 park:
 	//All HARTs that are != 0 will go here and spin in a wait loop
@@ -89,20 +101,16 @@ park:
 .align 4
 trap_handler:
   // save mepc - the instruction that was interrupted by the trap.
-  // The csrrs pseudo-instruction will not execute the set operation if the src
-  // register is x0 (zero).
   // arg0 = mcause
   // arg1 = mepc
   csrr a0, mcause
   csrr a1, mepc
-  csrr s0, mstatus
-  add  s1, ra, zero
+  mv   s0, ra
 
   call handle_trap
 
   // restore the old return address to the mepc so we jump back to the correct
   // location that we left when we trapped
-  csrw mepc, s1
-  csrw mstatus, s0
+  csrw mepc, s0
 
   mret

@@ -31,6 +31,10 @@ macro_rules! println {
     };
 }
 
+extern {
+  fn enable_interrupts() -> ();
+}
+
 //The eh_personality tells our program how to unwind. We aren't going to write
 //that, so tell it to do nothing.
 #[lang = "eh_personality"]
@@ -54,6 +58,9 @@ const CORE_LOCAL_INTERRUPT_MAP: u64 = 0x0200_0000;
 
 #[no_mangle]
 fn main() {
+    unsafe { enable_interrupts(); }
+    println!("interrupts enabled");
+
     // Intialize UART for reading/writing
     console::uart::init().unwrap();
 
